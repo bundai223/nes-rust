@@ -3,9 +3,15 @@ use std::io::{BufReader, Read};
 
 const NES_HEADER_SIGNATURE_SIZE: usize = 4;
 const NES_HEADER_SIZE: usize = 6;
-const NES_PROGRAM_ROM_SIZE: usize = 16 * 1024 * 1024;
-const NES_CHARACTER_ROM_SIZE: usize = 8 * 1024 * 1024;
-const NES_ROM_SIZE: usize           = NES_HEADER_SIZE + NES_PROGRAM_ROM_SIZE + NES_CHARACTER_ROM_SIZE;
+const NES_PROGRAM_ROM_PAGE_SIZE: usize = 16 * 1024 * 1024;
+const NES_CHARACTER_ROM_PAGE_SIZE: usize = 8 * 1024 * 1024;
+
+struct Page { start: usize, end: usize, num: usize }
+struct Header {
+    signature: Vec<char>,
+    prg_rom: Page,
+    chr_rom: Page
+}
 
 fn allocate(size: usize) -> Box<[u8]> {
     let mut tmpvec = Vec::<u8>::with_capacity(size);
@@ -15,14 +21,19 @@ fn allocate(size: usize) -> Box<[u8]> {
     return tmpvec.into_boxed_slice();
 }
 
-fn header_dump(rom: Box<[u8]>) {
-    println!("Header Dump");
-    for i in 0..NES_HEADER_SIGNATURE_SIZE {
-      print!("{:X} ", (*rom)[i]);
-    }
-    println!("");
-    println!("Size of PRG ROM in 16 KB units : {:X} ", (*rom)[NES_HEADER_SIGNATURE_SIZE + 0]);
-    println!("Size of CHR ROM in  8 KB units : {:X} ", (*rom)[NES_HEADER_SIGNATURE_SIZE + 1]);
+fn header_dump(rom: Box<[u8]>) -> Header {
+    let prg_page = (*rom)[NES_HEADER_SIGNATURE_SIZE + 0] as usize;
+    let chr_page = (*rom)[NES_HEADER_SIGNATURE_SIZE + 1] as usize;
+    let prg_page_start = NES_HEADER_SIGNATURE_SIZE + 0;
+    let prg_page_end   = prg_page_start + prg_page * NES_PROGRAM_ROM_PAGE_SIZE;
+    let chr_page_start = prg_page_end;
+    let chr_page_end   = chr_page_start + chr_page * NES_CHARACTER_ROM_PAGE_SIZE;
+
+    return Header{
+        signature: vec![(*rom)[0].into(), (*rom)[1].into(), (*rom)[2].into(), (*rom)[3].into()],
+        prg_rom: Page{ start: prg_page_start, end: prg_page_end, num: prg_page},
+        chr_rom: Page{ start: chr_page_start, end: chr_page_end, num: chr_page}
+    };
 }
 
 fn main() {
@@ -34,8 +45,11 @@ fn main() {
 
     reader.read_exact(&mut (*rom_data)).unwrap();
 
-    // println!("File dumo {}", filesize);
-    header_dump(rom_data);
+    let header = header_dump(rom_data);
 
+    println!("Header Dump");
+    println!("signature: {:?} ", header.signature);
     println!("");
+    println!("Size of PRG ROM in 16 KB units : {:X}-{:X}({:X})", header.prg_rom.start, header.prg_rom.end, header.prg_rom.num);
+    println!("Size of CHR ROM in  8 KB units : {:X}-{:X}({:X})", header.chr_rom.start, header.chr_rom.end, header.chr_rom.num);
 }
